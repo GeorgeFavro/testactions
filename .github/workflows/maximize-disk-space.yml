@@ -1,0 +1,62 @@
+name: Maximize Disk Space
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  maximize-disk-space:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Display disk space before cleanup
+        shell: bash
+        run: df -h
+
+      - name: Free up disk space
+        shell: bash
+        run: |
+          echo "Starting disk cleanup..."
+
+          # Initialize an associative array to hold timing information
+          declare -A times
+
+          time_command() {
+            local label=$1
+            shift
+            local start_time=$(date +%s)
+            "$@"
+            local end_time=$(date +%s)
+            times[$label]=$((end_time - start_time))
+          }
+
+          curl https://github.com/SUPERCILEX/fuc/releases/latest/download/rmz-x86_64-unknown-linux-gnu -L -s -o rmz -w "Download time: %{time_total}\n"
+          chmod +x rmz
+
+          time_command "remove_android" sudo ./rmz --force /usr/local/lib/android
+
+          time_command "remove_dotnet_sdk" sudo ./rmz --force /usr/share/dotnet
+          time_command "remove_ghc" sudo ./rmz --force /opt/ghc
+          time_command "remove_hostedtoolcache" sudo ./rmz --force /opt/hostedtoolcache
+          time_command "remove_azure_dirs" sudo ./rmz --force /usr/local/share/az_* /usr/local/bin/az /usr/local/bin/azcopy
+
+          # Clean npm cache
+          time_command "npm_cache_clean" npm cache clean --force > /dev/null 2>&1
+
+          # Clean pip cache
+          time_command "pip_cache_purge" pip cache purge > /dev/null 2>&1
+
+          # Clean docker
+          time_command "remove_docker_images_manual" sudo ./rmz --force /var/lib/docker
+
+          echo "Disk cleanup completed."
+
+          # Print summary of times
+          echo "Time taken for each operation:"
+          for key in "${!times[@]}"; do
+            echo "$key: ${times[$key]} seconds"
+          done
+
+      - name: Display disk space after cleanup
+        shell: bash
+        run: df -h
